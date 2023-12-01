@@ -19,39 +19,48 @@ def update_ip(domain, new_ip_addr)
   zone_id = domain_zones.first.id
 
   record_sets = client.list_resource_record_sets(hosted_zone_id: zone_id).resource_record_sets  
-  a_records = record_sets.select{|rec| rec.type == "A"}
-  if (a_records.size !=1)
-    raise "Did not find exactly one A record, found: #{a_records.to_s}"
-  end
-  old_ip_addr = a_records.first.resource_records.first.value
-  if old_ip_addr == new_ip_addr
-    puts "Current DNS IP matches current IP: #{old_ip_addr}"
+  for single_record_set in record_sets do
+    # puts "On records set: #{single_record_set.to_s}"
+    if single_record_set.type != "A"
+      # puts "skipping because not an A record"
+      next
+    end
+    if (single_record_set.name) != (domain + ".")
+      # puts "skipping because domain did not match."
+      next
+    end
+    # puts "This should be the correct record: #{single_record_set.to_s}"
+    old_ip_addr = single_record_set.resource_records.first.value
+    if old_ip_addr == new_ip_addr
+      puts "No action taken because the current DNS IP matches current IP: #{old_ip_addr}"
+      exit
+    end
+    change_request = {
+      change_batch: {
+        changes: [
+          {
+            action: "UPSERT",
+            resource_record_set: {
+              name: domain,
+              resource_records: [
+                {
+                  value: new_ip_addr,
+                },
+              ],
+              ttl: 300,
+              type: "A",
+            },
+          },
+        ],
+        comment: "",
+      },
+      hosted_zone_id: zone_id,
+    }
+  
+    puts client.change_resource_record_sets(change_request).to_h
+    puts "Updated IP address for " + domain + " to " + new_ip_addr
     exit
   end
-
-  change_request = {
-    change_batch: {
-      changes: [
-        {
-          action: "UPSERT", 
-          resource_record_set: {
-            name: domain, 
-            resource_records: [
-              {
-                value: new_ip_addr, 
-              }, 
-            ], 
-            ttl: 300, 
-            type: "A", 
-          }, 
-        }, 
-      ], 
-      comment: "", 
-    }, 
-    hosted_zone_id: zone_id, 
-  }
-
-  puts client.change_resource_record_sets(change_request).to_h
 end
 
 
